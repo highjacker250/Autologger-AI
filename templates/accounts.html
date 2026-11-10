@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ platform | title }} Accounts</title>
+    <style>
+        body { background-color: #0f172a; color: white; font-family: 'Segoe UI', sans-serif; margin: 0; padding: 20px; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        h1 { color: #38bdf8; margin: 0; }
+        .btn { background: #38bdf8; color: #0f172a; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: bold; }
+        table { width: 100%; border-collapse: collapse; background: #1e293b; border-radius: 12px; overflow: hidden; }
+        th, td { padding: 15px; text-align: left; border-bottom: 1px solid #334155; }
+        th { background: #0f172a; color: #94a3b8; text-transform: uppercase; font-size: 0.8rem; }
+        .success { color: #10b981; font-weight: bold; }
+        .failed { color: #ef4444; font-weight: bold; }
+        .pending { color: #f59e0b; font-weight: bold; }
+        .live-btn { background: #ef4444; color: white; padding: 5px 10px; border-radius: 5px; text-decoration: none; font-size: 0.8rem; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📱 {{ platform | title }} - Saved Accounts</h1>
+        <a href="/" class="btn">Back to Apps</a>
+    </div>
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Email</th>
+                <th>Password</th>
+                <th>Phone</th>
+                <th>Status</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for acc in accounts %}
+            <tr>
+                <td>{{ acc.id }}</td>
+                <td>{{ acc.email }}</td>
+                <td>{{ acc.password }}</td>
+                <td>{{ acc.phone }}</td>
+                <td class="{{ acc.status }}">{{ acc.status | upper }}</td>
+                <td>
+                    <a href="/live/{{ acc.id }}" class="live-btn" target="_blank">Watch Live</a>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="6" style="text-align: center; color: #94a3b8;">Koi account nahi mila.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</body>
+</html>
