@@ -1,19 +1,9 @@
-FROM mcr.microsoft.com/playwright/python:v1.41.2-jammy
-
+FROM python:3.11-slim
 WORKDIR /app
-
-# Copy requirements and install
+ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy the rest of the app
 COPY . .
-
-# Make start.sh executable
 RUN chmod +x start.sh
-
-# Expose port (Render sets PORT env var)
-EXPOSE 8080
-
-# Run the start script
+EXPOSE 10000
 CMD ["./start.sh"]

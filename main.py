@@ -1,73 +1,46 @@
+import os
+import logging
+from datetime import datetime, timezone
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel
-from db import supabase, get_accounts, get_stats
-from ai_parser import extract_otp
-from tg_login import send_tg_otp, verify_tg_otp
-import uvicorn
+from db import get_monitoring_stats, check_database
 
-app = FastAPI()
-templates = Jinja2Templates(directory="templates")
+logging.basicConfig(level=os.getenv('LOG_LEVEL', 'INFO'))
+logger = logging.getLogger('autologger')
+app = FastAPI(title='Autologger Service Monitor', version='2.0.0')
+templates = Jinja2Templates(directory='templates')
 
-# --- TELEGRAM LOGIN MODELS ---
-class TGLoginRequest(BaseModel):
-    phone: str
-
-class TGVerifyRequest(BaseModel):
-    phone: str
-    otp: str
-
-# --- WEBHOOK (SMS Receive) ---
-@app.post("/webhook")
-async def receive_sms(request: Request):
-    payload = await request.json()
-    data = payload.get("data", {})
-    phone = data.get("num")
-    sms = data.get("sms")
-    
-    if phone and sms:
-        otp = extract_otp(sms)
-        if otp:
-            supabase.table('otp_logs').insert({
-                "phone": phone, "otp": otp, "raw_sms": sms, "used": False
-            }).execute()
-            return {"status": "success", "otp": otp}
-    return {"status": "ignored"}
-
-# --- TELEGRAM LOGIN ROUTES ---
-@app.get("/telegram_login", response_class=HTMLResponse)
-async def telegram_login_page(request: Request):
-    return templates.TemplateResponse(request=request, name="telegram_login.html", context={})
-
-@app.post("/api/tg/send_otp")
-async def tg_send_otp_endpoint(req: TGLoginRequest):
-    return await send_tg_otp(req.phone)
-
-@app.post("/api/tg/verify_otp")
-async def tg_verify_endpoint(req: TGVerifyRequest):
-    return await verify_tg_otp(req.phone, req.otp)
-
-# --- DASHBOARD ROUTES ---
-@app.get("/", response_class=HTMLResponse)
+@app.get('/', response_class=HTMLResponse)
+@app.head('/')
 async def dashboard(request: Request):
-    stats = get_stats()
-    return templates.TemplateResponse(request=request, name="index.html", context={"stats": stats})
+    stats = get_monitoring_stats()
+    if request.method == 'HEAD':
+        return HTMLResponse(content='', status_code=200)
+    return templates.TemplateResponse(request=request, name='index.html', context={'stats': stats})
 
-@app.get("/accounts/{platform}", response_class=HTMLResponse)
-async def accounts_list(request: Request, platform: str):
-    accounts = get_accounts(platform)
-    return templates.TemplateResponse(request=request, name="accounts.html", context={"platform": platform, "accounts": accounts})
+@app.get('/health')
+@app.head('/health')
+async def health():
+    db_ok = check_database()
+    payload = {'status': 'ok' if db_ok else 'degraded', 'service': 'autologger-monitor',
+               'database': 'ok' if db_ok else 'unavailable',
+               'timestamp': datetime.now(timezone.utc).isoformat()}
+    return JSONResponse(payload, status_code=200 if db_ok else 503)
 
-@app.get("/live/{task_id}", response_class=HTMLResponse)
-async def live_view(request: Request, task_id: int):
-    res = supabase.table('tasks').select('status').eq('id', task_id).execute()
-    step = res.data[0]['status'] if res.data else "unknown"
-    return templates.TemplateResponse(request=request, name="live.html", context={"task_id": task_id, "step": step})
-
-@app.get("/api/stats")
+@app.get('/api/stats')
 async def api_stats():
-    return get_stats()
+    return get_monitoring_stats()
 
-if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8080)
+@app.get('/api/ready')
+async def ready():
+    return {'ready': True}
+
+@app.exception_handler(Exception)
+async def unhandled_error(request: Request, exc: Exception):
+    logger.exception('Unhandled request error on %s', request.url.path)
+    return JSONResponse({'detail': 'Internal server error'}, status_code=500)
+
+if __name__ == '__main__':
+    import uvicorn
+    uvicorn.run('main:app', host='0.0.0.0', port=int(os.getenv('PORT', '10000')))

@@ -1,39 +1,60 @@
+"""Read-only monitoring helpers. No OTP, password, session, or account data is stored."""
 import os
-from supabase import create_client, Client
+import logging
 from dotenv import load_dotenv
 
 load_dotenv()
-supabase: Client = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
+log = logging.getLogger('autologger.db')
+_client = None
 
-def create_task(platform, phone, email, password):
-    res = supabase.table('tasks').insert({
-        "platform": platform, "phone": phone, "email": email, 
-        "password": password, "status": "pending"
-    }).execute()
-    return res.data[0]['id']
 
-def update_task_status(task_id, status, extra_data=None):
-    up = {"status": status}
-    if extra_data: 
-        up.update(extra_data)
-    supabase.table('tasks').update(up).eq('id', task_id).execute()
+def _get_client():
+    global _client
+    if _client is not None:
+        return _client
+    url, key = os.getenv('SUPABASE_URL'), os.getenv('SUPABASE_KEY')
+    if not url or not key:
+        return None
+    try:
+        from supabase import create_client
+        _client = create_client(url, key)
+        return _client
+    except Exception:
+        log.exception('Could not initialize database client')
+        return None
 
-def get_pending_otp(phone):
-    res = supabase.table('otp_logs').select('*').eq('phone', phone).eq('used', False).order('id', desc=True).limit(1).execute()
-    if res.data:
-        otp = res.data[0]['otp']
-        supabase.table('otp_logs').update({"used": True}).eq('id', res.data[0]['id']).execute()
-        return otp
-    return None
 
-def get_accounts(platform):
-    res = supabase.table('tasks').select('*').eq('platform', platform).order('id', desc=True).execute()
-    return res.data
+def check_database():
+    client = _get_client()
+    if client is None:
+        # Database is optional; health is degraded only when credentials were configured
+        return not (os.getenv('SUPABASE_URL') or os.getenv('SUPABASE_KEY'))
+    try:
+        # A minimal read-only query verifies connectivity without exposing records.
+        client.table('inventory').select('id').limit(1).execute()
+        return True
+    except Exception:
+        log.exception('Database health check failed')
+        return False
 
-def get_stats():
-    otps = supabase.table('otp_logs').select('id', count='exact').execute()
-    accounts = supabase.table('tasks').select('id', count='exact').eq('status', 'success').execute()
-    return {
-        "otps": otps.count if otps.count else 0,
-        "accounts": accounts.count if accounts.count else 0
-    }
+
+def get_monitoring_stats():
+    client = _get_client()
+    stats = {'database': 'not_configured' if client is None else 'unknown',
+             'inventory_total': None, 'inventory_available': None,
+             'inventory_unavailable': None,
+             'note': 'Configure a read-only inventory table with id and status columns to show counts.'}
+    if client is None:
+        return stats
+    try:
+        # Only aggregate counts are returned. No phone numbers or other item values are read.
+        rows = client.table('inventory').select('id,status').limit(5000).execute().data or []
+        stats['database'] = 'ok'
+        stats['inventory_total'] = len(rows)
+        stats['inventory_available'] = sum(1 for row in rows if str(row.get('status', '')).lower() == 'available')
+        stats['inventory_unavailable'] = sum(1 for row in rows if str(row.get('status', '')).lower() in ('unavailable', 'out_of_stock'))
+        stats['note'] = 'Aggregate counts only; item identifiers and personal data are not displayed.'
+    except Exception:
+        stats['database'] = 'error'
+        log.exception('Inventory aggregate query failed')
+    return stats
