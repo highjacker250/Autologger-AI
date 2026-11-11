@@ -50,7 +50,8 @@ async def cmd_fb(message: types.Message):
 
 async def main():
     print("Bot Started...")
-    await dp.start_polling(bot)
+    # drop_pending_updates=True se purana conflict clear ho jata hai
+    await dp.start_polling(bot, drop_pending_updates=True)
 
 if __name__ == "__main__":
     asyncio.run(main())
