@@ -1,8 +1,6 @@
 import asyncio
 import random
-import string
 from playwright.async_api import async_playwright
-from playwright_stealth import stealth_async
 from db import create_task, update_task_status, get_pending_otp
 
 def generate_email():
@@ -32,7 +30,18 @@ async def run_automation(platform, phone, range_id):
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         )
         page = await context.new_page()
-        await stealth_async(page)
+        
+        # Custom Stealth Script
+        await page.add_init_script("""
+            Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+            window.chrome = { runtime: {} };
+            const originalQuery = window.navigator.permissions.query;
+            window.navigator.permissions.query = (parameters) => (
+                parameters.name === 'notifications' ?
+                    Promise.resolve({ state: Notification.permission }) :
+                    originalQuery(parameters)
+            );
+        """)
 
         try:
             if platform == "instagram":
@@ -49,7 +58,6 @@ async def run_automation(platform, phone, range_id):
                 await page.click('button[type="submit"]')
                 update_task_status(task_id, "waiting_otp")
                 
-                # Wait for OTP
                 otp = await wait_for_otp(phone)
                 if otp:
                     update_task_status(task_id, "entering_otp")
