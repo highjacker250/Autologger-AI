@@ -36,4 +36,4 @@ def get_stats():
     return {
         "otps": otps.count if otps.count else 0,
         "accounts": accounts.count if accounts.count else 0
-  }
+    }
