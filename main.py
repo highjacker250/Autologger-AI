@@ -29,18 +29,18 @@ async def receive_sms(request: Request):
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
     stats = get_stats()
-    return templates.TemplateResponse("index.html", {"request": request, "stats": stats})
+    return templates.TemplateResponse(request=request, name="index.html", context={"stats": stats})
 
 @app.get("/accounts/{platform}", response_class=HTMLResponse)
 async def accounts_list(request: Request, platform: str):
     accounts = get_accounts(platform)
-    return templates.TemplateResponse("accounts.html", {"request": request, "platform": platform, "accounts": accounts})
+    return templates.TemplateResponse(request=request, name="accounts.html", context={"platform": platform, "accounts": accounts})
 
 @app.get("/live/{task_id}", response_class=HTMLResponse)
 async def live_view(request: Request, task_id: int):
     res = supabase.table('tasks').select('status').eq('id', task_id).execute()
     step = res.data[0]['status'] if res.data else "unknown"
-    return templates.TemplateResponse("live.html", {"request": request, "task_id": task_id, "step": step})
+    return templates.TemplateResponse(request=request, name="live.html", context={"task_id": task_id, "step": step})
 
 @app.get("/api/stats")
 async def api_stats():
