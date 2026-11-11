@@ -8,3 +8,4 @@ groq
 imap-tools
 httpx
 jinja2
+requests
