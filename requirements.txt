@@ -1,6 +1,5 @@
 aiogram
 playwright
-playwright-stealth
 supabase
 fastapi
 uvicorn
